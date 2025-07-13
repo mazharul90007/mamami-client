@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { circlesAPI } from '../services/api';
 import { checkAuthStatus } from '../services/api';
-import { Circle, CircleMember, Message } from '../types';
+import { Circle, Message } from '../types';
 import WebSocketService from '../services/websocket';
-import { Send, RefreshCw, Loader2, AlertCircle, ArrowLeft, Users, User } from 'lucide-react';
+import { Send, RefreshCw, Loader2, AlertCircle, ArrowLeft, User } from 'lucide-react';
 
-const ChatRoom: React.FC = () => {
-  const { circleId } = useParams<{ circleId: string }>();
+interface ChatRoomProps {
+  circleId?: string;
+  onBack?: () => void;
+}
+
+const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) => {
+  const circleId = propCircleId;
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [circle, setCircle] = useState<Circle | null>(null);
-  const [members, setMembers] = useState<CircleMember[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,10 +62,7 @@ const ChatRoom: React.FC = () => {
       
       console.log('Fetching circle data for circleId:', circleId);
       
-      const [circleResponse, membersResponse] = await Promise.all([
-        circlesAPI.getCircleDetails(circleId!),
-        circlesAPI.getCircleMembers(circleId!)
-      ]);
+      const circleResponse = await circlesAPI.getCircleDetails(circleId!);
 
       if (circleResponse.success) {
         setCircle(circleResponse.data);
@@ -71,13 +71,6 @@ const ChatRoom: React.FC = () => {
         console.error('Failed to fetch circle details:', circleResponse.message);
         setError(`Failed to load circle: ${circleResponse.message}`);
         return;
-      }
-      
-      if (membersResponse.success) {
-        setMembers(membersResponse.data);
-        console.log('Circle members loaded:', membersResponse.data.length, 'members');
-      } else {
-        console.error('Failed to fetch members:', membersResponse.message);
       }
 
       // Load messages separately with better error handling
@@ -134,39 +127,70 @@ const ChatRoom: React.FC = () => {
     }
 
     console.log('Setting up WebSocket connection...');
+    console.log('Token exists:', !!token);
+    
+    // First test if backend HTTP server is reachable
+    try {
+      console.log('Testing backend HTTP connection...');
+      const response = await fetch('http://localhost:5000/');
+      console.log('Backend HTTP test:', response.status, response.statusText);
+      const responseText = await response.text();
+      console.log('Backend response:', responseText);
+    } catch (error) {
+      console.error('Backend HTTP connection failed:', error);
+      setWsError('Backend server is not running. Please start the server with: cd mamami && pnpm dev');
+      return;
+    }
+    
     wsRef.current = new WebSocketService();
     
     try {
+      console.log('Attempting to connect WebSocket...');
       await wsRef.current.connect(token);
+      console.log('WebSocket connection successful!');
       setWsConnected(true);
       setWsError('');
 
-      console.log('WebSocket connected and authenticated, joining circle...');
-      
-      // Join the circle
-      wsRef.current.joinCircle(circleId!);
+      console.log('WebSocket connected and authenticated');
 
       // Set up message handlers for backend message types
       wsRef.current.on('authenticated', (data: any) => {
         console.log('WebSocket authenticated:', data);
       });
 
-      wsRef.current.on('joined-circle', (data: any) => {
-        console.log('Joined circle:', data);
-      });
-
       wsRef.current.on('new-message', (message: Message) => {
         console.log('🎉 NEW MESSAGE RECEIVED:', message);
-        setMessages(prev => {
-          // Check if message already exists to avoid duplicates
-          const exists = prev.some(m => m.id === message.id);
-          if (exists) {
-            console.log('Message already exists, not adding duplicate');
-            return prev;
-          }
-          console.log('Adding new message to chat');
-          return [...prev, message];
-        });
+        
+        // Only add message if it belongs to the current circle
+        if (message.circleId === circleId) {
+          setMessages(prev => {
+            // Check if message already exists to avoid duplicates
+            const exists = prev.some(m => m.id === message.id);
+            if (exists) {
+              console.log('Message already exists, not adding duplicate');
+              return prev;
+            }
+            
+            // Check if this is a real message that should replace a temporary message
+            const tempMessageIndex = prev.findIndex(m => 
+              m.id.startsWith('temp-') && 
+              m.content === message.content && 
+              m.userId === message.userId
+            );
+            
+            if (tempMessageIndex !== -1) {
+              console.log('Replacing temporary message with real message');
+              const newMessages = [...prev];
+              newMessages[tempMessageIndex] = message;
+              return newMessages;
+            }
+            
+            console.log('Adding new message to chat for circle:', circleId);
+            return [...prev, message];
+          });
+        } else {
+          console.log('Message received for different circle:', message.circleId, 'current circle:', circleId);
+        }
       });
 
       wsRef.current.on('user-typing', (data: { userId: string; circleId: string; isTyping: boolean }) => {
@@ -182,27 +206,29 @@ const ChatRoom: React.FC = () => {
         }
       });
 
-      wsRef.current.on('user-joined-circle', (data: { userId: string; circleId: string }) => {
-        console.log('User joined circle:', data);
-        // Refresh members list
-        fetchCircleData();
-      });
 
-      wsRef.current.on('user-left-circle', (data: { userId: string; circleId: string }) => {
-        console.log('User left circle:', data);
-        // Refresh members list
-        fetchCircleData();
-      });
 
       wsRef.current.on('error', (data: any) => {
         console.error('WebSocket error:', data);
-        const errorMessage = data.message || data.field || 'WebSocket error occurred';
+        let errorMessage = data.message || data.field || 'WebSocket error occurred';
+        
+        // Provide more helpful error messages
+        if (errorMessage.includes('connection failed')) {
+          errorMessage = 'Cannot connect to server. Please make sure the backend server is running on port 5000.';
+        } else if (errorMessage.includes('timeout')) {
+          errorMessage = 'Connection timeout. Server may not be responding.';
+        } else if (errorMessage.includes('Authentication failed')) {
+          errorMessage = 'Authentication failed. Please try logging in again.';
+        }
+        
         setWsError(errorMessage);
       });
 
     } catch (error) {
       console.error('WebSocket connection failed:', error);
-      setWsError('Failed to connect to real-time chat');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to connect to real-time chat';
+      console.error('Detailed error:', errorMessage);
+      setWsError(errorMessage);
       setWsConnected(false);
     }
   };
@@ -212,6 +238,27 @@ const ChatRoom: React.FC = () => {
 
     const messageContent = newMessage.trim();
     setNewMessage(''); // Clear input immediately for better UX
+
+    // Create temporary message for immediate feedback
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
+      content: messageContent,
+      userId: user?.id || '',
+      circleId: circleId!,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      user: {
+        id: user?.id || '',
+        name: user?.name || '',
+        email: user?.email || '',
+        profilePhotoUrl: user?.profilePhotoUrl || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    };
+
+    // Add temporary message immediately
+    setMessages(prev => [...prev, tempMessage]);
 
     try {
       console.log('Sending message:', messageContent);
@@ -223,7 +270,8 @@ const ChatRoom: React.FC = () => {
     } catch (error) {
       console.error('Failed to send message:', error);
       setError('Failed to send message');
-      // Restore the message in input if sending failed
+      // Remove temporary message and restore input if sending failed
+      setMessages(prev => prev.filter(m => m.id !== tempMessage.id));
       setNewMessage(messageContent);
     }
   };
@@ -277,7 +325,7 @@ const ChatRoom: React.FC = () => {
           {error}
         </div>
         <button
-          onClick={() => window.location.href = '/'}
+          onClick={onBack || (() => window.location.href = '/')}
           className="flex items-center text-primary-600 hover:text-primary-700"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
@@ -294,14 +342,14 @@ const ChatRoom: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => window.history.back()}
+              onClick={onBack || (() => window.history.back())}
               className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-full transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">{circle?.name || 'Loading...'}</h1>
-              <p className="text-sm text-gray-600">{members.length} members</p>
+              <p className="text-sm text-gray-600">{circle?.description || 'Community chat'}</p>
             </div>
           </div>
           
@@ -310,28 +358,35 @@ const ChatRoom: React.FC = () => {
             onClick={() => {
               const authStatus = checkAuthStatus();
               console.log('Manual auth check:', authStatus);
-              alert(`Auth Status:\nToken: ${authStatus.hasToken}\nUser: ${authStatus.hasUser}\nEmail: ${authStatus.user?.email || 'N/A'}`);
+              console.log('WebSocket status:', {
+                connected: wsConnected,
+                error: wsError,
+                hasWebSocket: !!wsRef.current,
+                circleId: circleId
+              });
+              alert(`Auth Status:\nToken: ${authStatus.hasToken}\nUser: ${authStatus.hasUser}\nEmail: ${authStatus.user?.email || 'N/A'}\n\nWebSocket:\nConnected: ${wsConnected}\nError: ${wsError || 'None'}`);
             }}
             className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-md hover:bg-yellow-200"
           >
             Debug Auth
           </button>
           
-          {/* Debug Join Circle button */}
+          {/* Test Message button */}
           <button
             onClick={() => {
               if (wsRef.current && wsConnected) {
-                console.log('Manually joining circle:', circleId);
-                wsRef.current.joinCircle(circleId!);
+                console.log('Sending test message to circle:', circleId);
+                wsRef.current.sendMessage(circleId!, 'Test message from debug button');
               } else {
-                console.log('WebSocket not connected, cannot join circle');
-                alert('WebSocket not connected');
+                alert('WebSocket not connected!');
               }
             }}
-            className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200"
+            className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-md hover:bg-green-200"
           >
-            Debug Join
+            Test Message
           </button>
+          
+
           
           {/* Refresh button */}
           <button
@@ -352,9 +407,20 @@ const ChatRoom: React.FC = () => {
         )}
         
         {wsError && (
-          <div className="mt-2 flex items-center text-sm text-red-600">
-            <AlertCircle className="h-4 w-4 mr-1" />
-            WebSocket: {wsError}
+          <div className="mt-2 flex items-center justify-between text-sm text-red-600">
+            <div className="flex items-center">
+              <AlertCircle className="h-4 w-4 mr-1" />
+              WebSocket: {wsError}
+            </div>
+            <button
+              onClick={() => {
+                setWsError('');
+                setupWebSocket();
+              }}
+              className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+            >
+              Retry
+            </button>
           </div>
         )}
         

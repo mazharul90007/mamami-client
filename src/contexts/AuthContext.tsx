@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, AuthResponse, ApiResponse } from '../types';
+import { User } from '../types';
 import { authAPI } from '../services/api';
 
 interface AuthContextType {
@@ -11,7 +11,7 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -50,17 +50,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string) => {
     try {
       setIsLoading(true);
-      const response: ApiResponse<AuthResponse> = await authAPI.login(email, password);
+      const response = await authAPI.login(email, password);
       
-      if (response.success && response.data) {
-        localStorage.setItem('accessToken', response.data.accessToken);
-        localStorage.setItem('refreshToken', response.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        
-        setUser(response.data.user);
-      } else {
-        throw new Error(response.message || 'Login failed');
-      }
+      localStorage.setItem('accessToken', response.data.accessToken);
+      localStorage.setItem('refreshToken', response.data.refreshToken);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      setUser(response.data.user);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -72,17 +68,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (name: string, email: string, password: string) => {
     try {
       setIsLoading(true);
-      const response: ApiResponse<AuthResponse> = await authAPI.register({ name, email, password });
+      const response = await authAPI.register(name, email, password);
       
-      if (response.success && response.data) {
-        localStorage.setItem('accessToken', response.data.accessToken);
-        localStorage.setItem('refreshToken', response.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        
-        setUser(response.data.user);
-      } else {
-        throw new Error(response.message || 'Registration failed');
-      }
+      localStorage.setItem('accessToken', response.data.accessToken);
+      localStorage.setItem('refreshToken', response.data.refreshToken);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      
+      setUser(response.data.user);
     } catch (error) {
       console.error('Register error:', error);
       throw error;
