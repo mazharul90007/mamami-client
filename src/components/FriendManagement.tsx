@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { User, FriendRequest } from '../types';
 import { friendRequestAPI } from '../services/api';
+import CallButton from './CallButton';
 import { Check, X, UserMinus, MessageCircle, Play, Loader2, UserPlus } from 'lucide-react';
 
 type TabType = 'friends' | 'pending' | 'sent';
 
-const FriendManagement: React.FC = () => {
+interface FriendManagementProps {
+  onSelectConversation?: (friendId: string) => void;
+  friends?: User[];
+  onFriendsUpdate?: () => void;
+}
+
+const FriendManagement: React.FC<FriendManagementProps> = ({ onSelectConversation, friends = [], onFriendsUpdate }) => {
   const [activeTab, setActiveTab] = useState<TabType>('friends');
-  const [friends, setFriends] = useState<User[]>([]);
   const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,13 +29,11 @@ const FriendManagement: React.FC = () => {
       setLoading(true);
       setError('');
 
-      const [friendsRes, pendingRes, sentRes] = await Promise.all([
-        friendRequestAPI.getFriendsList(),
+      const [pendingRes, sentRes] = await Promise.all([
         friendRequestAPI.getPendingRequests(),
         friendRequestAPI.getSentRequests()
       ]);
 
-      if (friendsRes.success) setFriends(friendsRes.data);
       if (pendingRes.success) setPendingRequests(pendingRes.data);
       if (sentRes.success) setSentRequests(sentRes.data);
     } catch (err: any) {
@@ -79,6 +83,7 @@ const FriendManagement: React.FC = () => {
     try {
       await friendRequestAPI.removeFriend(friendId);
       await loadData(); // Reload to update lists
+      onFriendsUpdate?.(); // Notify parent to refresh friends list
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to remove friend');
     } finally {
@@ -105,7 +110,7 @@ const FriendManagement: React.FC = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  if (loading) {
+  if (loading && activeTab !== 'friends') {
     return (
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
@@ -196,12 +201,19 @@ const FriendManagement: React.FC = () => {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {/* TODO: Navigate to direct message */}}
+                        onClick={() => onSelectConversation?.(friend.id)}
                         className="flex-1 flex items-center justify-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
                       >
                         <MessageCircle className="h-4 w-4 mr-1" />
                         Message
                       </button>
+                      <CallButton
+                        receiverId={friend.id}
+                        receiverName={friend.name}
+                        variant="secondary"
+                        size="sm"
+                        className="px-3 py-2"
+                      />
                       <button
                         onClick={() => handleRemoveFriend(friend.id)}
                         disabled={processingActions.has(friend.id)}

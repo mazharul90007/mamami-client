@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { AudioCallProvider } from './contexts/AudioCallContext';
 import LoginForm from './components/LoginForm';
 import RegisterForm from './components/RegisterForm';
 import CircleList from './components/CircleList';
@@ -9,6 +10,9 @@ import MatchList from './components/MatchList';
 import FriendManagement from './components/FriendManagement';
 import ConversationList from './components/ConversationList';
 import DirectMessageChat from './components/DirectMessageChat';
+import AudioCallManager from './components/AudioCallManager';
+import AudioCallTest from './components/AudioCallTest';
+import AudioCallDebug from './components/AudioCallDebug';
 import { userAPI, friendRequestAPI, directMessageAPI } from './services/api';
 import { User, Mood, DirectMessage } from './types';
 import WebSocketService from './services/websocket';
@@ -29,13 +33,15 @@ type ViewType =
   | 'friends' 
   | 'messages' 
   | 'direct-chat' 
-  | 'profile';
+  | 'profile'
+  | 'call-test';
 
 interface AppState {
   currentView: ViewType;
   selectedCircle: string | null;
   selectedFriend: User | null;
   matches: User[];
+  friends: User[];
   showMoodSelection: boolean;
 }
 
@@ -46,6 +52,7 @@ function App() {
     selectedCircle: null,
     selectedFriend: null,
     matches: [],
+    friends: [],
     showMoodSelection: false,
   });
   const [wsService, setWsService] = useState<WebSocketService | null>(null);
@@ -55,6 +62,7 @@ function App() {
   useEffect(() => {
     if (user) {
       initializeWebSocket();
+      loadFriends();
     } else {
       if (wsService) {
         wsService.disconnect();
@@ -130,6 +138,7 @@ function App() {
 
   const handleFriendRequestAccepted = (data: any) => {
     addNotification(`Friend request accepted by ${data.receiverEmail || 'someone'}`);
+    loadFriends(); // Refresh friends list
   };
 
   const handleFriendRequestRejected = (data: any) => {
@@ -138,6 +147,7 @@ function App() {
 
   const handleFriendRemoved = (data: any) => {
     addNotification(`Removed as friend by ${data.removedByEmail || 'someone'}`);
+    loadFriends(); // Refresh friends list
   };
 
   const handleWebSocketError = (error: any) => {
@@ -203,10 +213,21 @@ function App() {
     }
   };
 
+  const loadFriends = async () => {
+    try {
+      const response = await friendRequestAPI.getFriendsList();
+      if (response.success) {
+        setAppState(prev => ({ ...prev, friends: response.data }));
+      }
+    } catch (error) {
+      console.error('Failed to load friends:', error);
+    }
+  };
+
   const handleSelectConversation = (friendId: string) => {
-    // Find the friend from matches or friends list
+    // Find the friend from matches, friends list, or create a placeholder
     const friend = appState.matches.find(m => m.id === friendId) || 
-                  // You might need to load friends list here
+                  appState.friends.find(f => f.id === friendId) ||
                   { 
                     id: friendId, 
                     name: 'Unknown User', 
@@ -233,6 +254,7 @@ function App() {
       selectedCircle: null,
       selectedFriend: null,
       matches: [],
+      friends: [],
       showMoodSelection: false,
     });
   };
@@ -252,20 +274,24 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <div className="fixed top-4 right-4 z-50 space-y-2">
-          {notifications.map((notification, index) => (
-            <div
-              key={index}
-              className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 max-w-sm"
-            >
-              <p className="text-sm text-gray-900">{notification}</p>
-            </div>
-          ))}
-        </div>
-      )}
+    <AudioCallProvider wsService={wsService}>
+      <div className="min-h-screen bg-gray-50">
+        {/* Audio Call Manager */}
+        <AudioCallManager />
+        
+        {/* Notifications */}
+        {notifications.length > 0 && (
+          <div className="fixed top-4 right-4 z-50 space-y-2">
+            {notifications.map((notification, index) => (
+              <div
+                key={index}
+                className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 max-w-sm"
+              >
+                <p className="text-sm text-gray-900">{notification}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
       {/* Navigation */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -309,6 +335,14 @@ function App() {
                 className={`p-2 rounded-lg ${appState.currentView === 'profile' ? 'bg-primary-100 text-primary-600' : 'text-gray-600 hover:text-gray-900'}`}
               >
                 <UserIcon className="h-5 w-5" />
+              </button>
+              
+              <button
+                onClick={() => navigateTo('call-test')}
+                className={`p-2 rounded-lg ${appState.currentView === 'call-test' ? 'bg-primary-100 text-primary-600' : 'text-gray-600 hover:text-gray-900'}`}
+                title="Audio Call Test"
+              >
+                📞
               </button>
               
               <button
@@ -403,7 +437,11 @@ function App() {
         )}
 
         {appState.currentView === 'friends' && (
-          <FriendManagement />
+          <FriendManagement 
+            onSelectConversation={handleSelectConversation} 
+            friends={appState.friends}
+            onFriendsUpdate={loadFriends}
+          />
         )}
 
         {appState.currentView === 'messages' && (
@@ -502,8 +540,13 @@ function App() {
             </div>
           </div>
         )}
+
+        {appState.currentView === 'call-test' && (
+          <AudioCallDebug />
+        )}
       </main>
-    </div>
+      </div>
+    </AudioCallProvider>
   );
 }
 

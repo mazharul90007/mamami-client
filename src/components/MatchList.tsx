@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-
+import CallButton from './CallButton';
 import { UserPlus, MessageCircle, Mic, Loader2, ArrowLeft } from 'lucide-react';
 
 interface MatchListProps {
@@ -151,6 +151,13 @@ const MatchList: React.FC<MatchListProps> = ({ matches, onBack, onSendFriendRequ
                   <UserPlus className="h-4 w-4 mr-2" />
                   Send Request
                 </button>
+                <CallButton
+                  receiverId={user.id}
+                  receiverName={user.name}
+                  variant="secondary"
+                  size="sm"
+                  className="px-4 py-2"
+                />
                 <button
                   onClick={() => {/* TODO: Navigate to direct message */}}
                   className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"

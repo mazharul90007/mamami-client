@@ -32,8 +32,6 @@ export interface Circle {
   updatedAt: string;
 }
 
-
-
 export interface Message {
   id: string;
   content: string | null;
@@ -87,6 +85,49 @@ export interface Conversation {
   unreadCount: number;
 }
 
+// Audio Call Types
+export interface CallSession {
+  id: string;
+  callerId: string;
+  receiverId: string;
+  status: 'RINGING' | 'CONNECTED' | 'ENDED' | 'MISSED' | 'REJECTED';
+  channelName: string;
+  startTime?: string;
+  endTime?: string;
+  duration?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IncomingCallData {
+  callId: string;
+  callerName: string;
+  callerPhoto?: string;
+  channelName: string;
+  agoraAppId: string;
+  token: string;
+}
+
+export interface CallInitiatedData {
+  callId: string;
+  channelName: string;
+  agoraAppId: string;
+  token: string;
+}
+
+export interface CallState {
+  isInCall: boolean;
+  callId?: string;
+  channelName?: string;
+  agoraAppId?: string;
+  token?: string;
+  isCaller: boolean;
+  isReceiver: boolean;
+  callStatus: 'IDLE' | 'RINGING' | 'CONNECTED' | 'ENDED' | 'MISSED' | 'REJECTED';
+  remoteUser?: User;
+  duration: number;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   message: string;
@@ -105,7 +146,7 @@ export interface AuthResponse {
 
 // Updated WebSocket message types to match backend exactly
 export interface WebSocketMessage {
-  type: 'authenticate' | 'authenticated' | 'join-circle' | 'joined-circle' | 'leave-circle' | 'left-circle' | 'send-message' | 'message-sent' | 'new-message' | 'typing' | 'user-typing' | 'user-joined-circle' | 'user-left-circle' | 'send-direct-message' | 'direct-message-sent' | 'new-direct-message' | 'send-friend-request' | 'friend-request-sent' | 'friend-request-received' | 'accept-friend-request' | 'friend-request-accepted' | 'reject-friend-request' | 'friend-request-rejected' | 'remove-friend' | 'friend-removed' | 'error';
+  type: 'authenticate' | 'authenticated' | 'join-circle' | 'joined-circle' | 'leave-circle' | 'left-circle' | 'send-message' | 'message-sent' | 'new-message' | 'typing' | 'user-typing' | 'user-joined-circle' | 'user-left-circle' | 'send-direct-message' | 'direct-message-sent' | 'new-direct-message' | 'send-friend-request' | 'friend-request-sent' | 'friend-request-received' | 'accept-friend-request' | 'friend-request-accepted' | 'reject-friend-request' | 'friend-request-rejected' | 'remove-friend' | 'friend-removed' | 'initiate-call' | 'call-initiated' | 'incoming-call' | 'accept-call' | 'call-accepted' | 'reject-call' | 'call-rejected' | 'end-call' | 'call-ended' | 'call-missed' | 'error';
   data?: any;
   token?: string;
   circleId?: string;
@@ -119,4 +160,6 @@ export interface WebSocketMessage {
   message?: any;
   user?: User;
   timestamp?: string;
+  callId?: string;
+  duration?: number;
 } 

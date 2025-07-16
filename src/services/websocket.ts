@@ -10,12 +10,7 @@ export class WebSocketService {
   private isAuthenticated = false;
   private authenticationPromise: Promise<void> | null = null;
 
-  constructor(private baseUrl: string = 'ws://localhost:5000') {
-    // Try to detect if we're in development and adjust URL accordingly
-    if (window.location.hostname === 'localhost' && window.location.port === '3000') {
-      this.baseUrl = 'ws://localhost:5000';
-    }
-    
+  constructor(private baseUrl: string = process.env.REACT_APP_WS_URL || 'ws://localhost:5000') {
     // Log the WebSocket URL being used
     console.log('WebSocket will connect to:', this.baseUrl);
   }
@@ -303,7 +298,60 @@ export class WebSocketService {
       return;
     }
 
+    // Audio Call Message Handlers
+    if (message.type === 'call-initiated') {
+      console.log('📞 Call initiated:', message);
+      const handlers = this.messageHandlers.get('call-initiated');
+      if (handlers) {
+        handlers.forEach(handler => handler(message));
+      }
+      return;
+    }
 
+    if (message.type === 'incoming-call') {
+      console.log('📞 Incoming call:', message);
+      const handlers = this.messageHandlers.get('incoming-call');
+      if (handlers) {
+        handlers.forEach(handler => handler(message.data || message));
+      }
+      return;
+    }
+
+    if (message.type === 'call-accepted') {
+      console.log('✅ Call accepted:', message);
+      const handlers = this.messageHandlers.get('call-accepted');
+      if (handlers) {
+        handlers.forEach(handler => handler(message));
+      }
+      return;
+    }
+
+    if (message.type === 'call-rejected') {
+      console.log('❌ Call rejected:', message);
+      const handlers = this.messageHandlers.get('call-rejected');
+      if (handlers) {
+        handlers.forEach(handler => handler(message));
+      }
+      return;
+    }
+
+    if (message.type === 'call-ended') {
+      console.log('📞 Call ended:', message);
+      const handlers = this.messageHandlers.get('call-ended');
+      if (handlers) {
+        handlers.forEach(handler => handler(message));
+      }
+      return;
+    }
+
+    if (message.type === 'call-missed') {
+      console.log('📞 Call missed:', message);
+      const handlers = this.messageHandlers.get('call-missed');
+      if (handlers) {
+        handlers.forEach(handler => handler(message));
+      }
+      return;
+    }
 
     if (message.type === 'error') {
       console.error('❌ WebSocket error message:', message);
@@ -442,6 +490,70 @@ export class WebSocketService {
     const message = {
       type: 'remove-friend',
       friendId: friendId
+    };
+    this.send(message);
+  }
+
+  // Audio Call Methods
+  initiateCall(receiverId: string) {
+    console.log('🔧 WebSocketService: initiateCall called with receiverId:', receiverId);
+    console.log('🔧 WebSocketService: isAuthenticated:', this.isAuthenticated);
+    console.log('🔧 WebSocketService: ws readyState:', this.ws?.readyState);
+    
+    if (!this.isAuthenticated) {
+      console.error('❌ Cannot initiate call: not authenticated');
+      return;
+    }
+    
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('❌ Cannot initiate call: WebSocket not connected');
+      return;
+    }
+    
+    console.log('📞 Initiating call to:', receiverId);
+    const message = {
+      type: 'initiate-call',
+      receiverId: receiverId
+    };
+    console.log('📤 Sending call message:', message);
+    this.send(message);
+  }
+
+  acceptCall(callId: string) {
+    if (!this.isAuthenticated) {
+      console.error('❌ Cannot accept call: not authenticated');
+      return;
+    }
+    console.log('✅ Accepting call:', callId);
+    const message = {
+      type: 'accept-call',
+      callId: callId
+    };
+    this.send(message);
+  }
+
+  rejectCall(callId: string) {
+    if (!this.isAuthenticated) {
+      console.error('❌ Cannot reject call: not authenticated');
+      return;
+    }
+    console.log('❌ Rejecting call:', callId);
+    const message = {
+      type: 'reject-call',
+      callId: callId
+    };
+    this.send(message);
+  }
+
+  endCall(callId: string) {
+    if (!this.isAuthenticated) {
+      console.error('❌ Cannot end call: not authenticated');
+      return;
+    }
+    console.log('📞 Ending call:', callId);
+    const message = {
+      type: 'end-call',
+      callId: callId
     };
     this.send(message);
   }

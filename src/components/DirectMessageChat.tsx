@@ -3,6 +3,7 @@ import { DirectMessage, User } from '../types';
 import { directMessageAPI } from '../services/api';
 import WebSocketService from '../services/websocket';
 import { useAuth } from '../contexts/AuthContext';
+import CallButton from './CallButton';
 import { Send, Mic, Play, Pause, Loader2, ArrowLeft, MoreVertical, RotateCcw } from 'lucide-react';
 
 interface DirectMessageChatProps {
@@ -587,9 +588,17 @@ const DirectMessageChat: React.FC<DirectMessageChatProps> = ({
             <p className="text-sm text-gray-600">Online</p>
           </div>
         </div>
-        <button className="text-gray-600 hover:text-gray-800">
-          <MoreVertical className="h-5 w-5" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <CallButton
+            receiverId={friend.id}
+            receiverName={friend.name}
+            variant="icon"
+            size="sm"
+          />
+          <button className="text-gray-600 hover:text-gray-800">
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {error && (
