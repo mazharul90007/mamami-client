@@ -215,6 +215,24 @@ export class WebSocketService {
       return;
     }
 
+    if (message.type === 'joined-circle') {
+      console.log('✅ JOINED CIRCLE:', message);
+      const handlers = this.messageHandlers.get('joined-circle');
+      if (handlers) {
+        handlers.forEach(handler => handler(message.data || message));
+      }
+      return;
+    }
+
+    if (message.type === 'left-circle') {
+      console.log('👋 LEFT CIRCLE:', message);
+      const handlers = this.messageHandlers.get('left-circle');
+      if (handlers) {
+        handlers.forEach(handler => handler(message.data || message));
+      }
+      return;
+    }
+
     if (message.type === 'message-sent') {
       console.log('✅ Message sent confirmation:', message);
       const handlers = this.messageHandlers.get('message-sent');
@@ -490,6 +508,33 @@ export class WebSocketService {
     const message = {
       type: 'remove-friend',
       friendId: friendId
+    };
+    this.send(message);
+  }
+
+  // Circle Management Methods
+  joinCircle(circleId: string) {
+    if (!this.isAuthenticated) {
+      console.error('❌ Cannot join circle: not authenticated');
+      return;
+    }
+    console.log('👥 Joining circle:', circleId);
+    const message = {
+      type: 'join-circle',
+      circleId: circleId
+    };
+    this.send(message);
+  }
+
+  leaveCircle(circleId: string) {
+    if (!this.isAuthenticated) {
+      console.error('❌ Cannot leave circle: not authenticated');
+      return;
+    }
+    console.log('👋 Leaving circle:', circleId);
+    const message = {
+      type: 'leave-circle',
+      circleId: circleId
     };
     this.send(message);
   }

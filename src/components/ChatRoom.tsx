@@ -42,6 +42,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
     }
 
     return () => {
+      // Leave the circle before disconnecting
+      if (wsRef.current && circleId) {
+        console.log('Leaving circle:', circleId);
+        wsRef.current.leaveCircle(circleId);
+      }
+      
       if (wsRef.current) {
         wsRef.current.disconnect();
       }
@@ -99,7 +105,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
       console.log('loadMessages: Response received:', messagesResponse);
       
       if (messagesResponse.success) {
-        const loadedMessages = messagesResponse.data.reverse(); // Reverse to show newest first
+        const loadedMessages = messagesResponse.data; // Don't reverse - show oldest first
         setMessages(loadedMessages);
         console.log('Messages loaded successfully:', loadedMessages.length, 'messages');
         
@@ -156,6 +162,16 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
       // Set up message handlers for backend message types
       wsRef.current.on('authenticated', (data: any) => {
         console.log('WebSocket authenticated:', data);
+      });
+
+      // Join the circle when WebSocket is connected
+      if (circleId) {
+        console.log('🔧 Joining circle:', circleId);
+        wsRef.current.joinCircle(circleId);
+      }
+
+      wsRef.current.on('joined-circle', (data: any) => {
+        console.log('✅ Successfully joined circle:', data);
       });
 
       wsRef.current.on('new-message', (message: Message) => {
@@ -261,7 +277,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
     setMessages(prev => [...prev, tempMessage]);
 
     try {
-      console.log('Sending message:', messageContent);
+      console.log('📤 Sending message to circle:', circleId, 'Content:', messageContent);
       wsRef.current.sendMessage(circleId!, messageContent);
       
       // Stop typing indicator
