@@ -208,9 +208,18 @@ export class WebSocketService {
 
     if (message.type === 'new-message') {
       console.log('🎉 NEW MESSAGE EVENT:', message);
+      console.log('🔍 Message structure:', {
+        hasData: !!message.data,
+        hasMessage: !!message.message,
+        dataKeys: message.data ? Object.keys(message.data) : 'no data',
+        messageKeys: message.message ? Object.keys(message.message) : 'no message',
+        fullMessage: message
+      });
       const handlers = this.messageHandlers.get('new-message');
       if (handlers) {
-        handlers.forEach(handler => handler(message.data || message));
+        const messageData = message.data || message.message || message;
+        console.log('📤 Passing to handlers:', messageData);
+        handlers.forEach(handler => handler(messageData));
       }
       return;
     }

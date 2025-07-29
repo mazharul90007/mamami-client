@@ -111,11 +111,10 @@ function App() {
   };
 
   const handleNewMessage = (message: any) => {
-    if (appState.currentView === 'chat' && appState.selectedCircle === message.circleId) {
-      // Message will be handled by ChatRoom component
-      return;
+    // Only show notification for circle messages when not in chat view
+    if (appState.currentView !== 'chat') {
+      addNotification(`New message in ${message.circle?.name || 'circle'}`);
     }
-    addNotification(`New message in ${message.circle?.name || 'circle'}`);
   };
 
   const handleNewDirectMessage = (message: DirectMessage) => {
@@ -433,6 +432,7 @@ function App() {
           <ChatRoom
             circleId={appState.selectedCircle}
             onBack={() => setAppState(prev => ({ ...prev, currentView: 'circles' }))}
+            wsService={wsService}
           />
         )}
 

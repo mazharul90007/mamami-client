@@ -9,9 +9,10 @@ import { Send, RefreshCw, Loader2, AlertCircle, ArrowLeft, User } from 'lucide-r
 interface ChatRoomProps {
   circleId?: string;
   onBack?: () => void;
+  wsService?: WebSocketService | null;
 }
 
-const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) => {
+const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack, wsService }) => {
   const circleId = propCircleId;
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -126,126 +127,144 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
   };
 
   const setupWebSocket = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setWsError('No authentication token found');
-      return;
-    }
-
-    console.log('Setting up WebSocket connection...');
-    console.log('Token exists:', !!token);
-    
-    // First test if backend HTTP server is reachable
-    try {
-      console.log('Testing backend HTTP connection...');
-      const response = await fetch('http://localhost:5009/');
-      console.log('Backend HTTP test:', response.status, response.statusText);
-      const responseText = await response.text();
-      console.log('Backend response:', responseText);
-    } catch (error) {
-      console.error('Backend HTTP connection failed:', error);
-      setWsError('Backend server is not running. Please start the server with: cd mamami && pnpm dev');
-      return;
-    }
-    
-    wsRef.current = new WebSocketService();
-    
-    try {
-      console.log('Attempting to connect WebSocket...');
-      await wsRef.current.connect(token);
-      console.log('WebSocket connection successful!');
+    // Use the global WebSocket service if provided, otherwise create a new one
+    if (wsService) {
+      console.log('Using global WebSocket service');
+      wsRef.current = wsService;
       setWsConnected(true);
       setWsError('');
-
-      console.log('WebSocket connected and authenticated');
-
-      // Set up message handlers for backend message types
-      wsRef.current.on('authenticated', (data: any) => {
-        console.log('WebSocket authenticated:', data);
-      });
-
-      // Join the circle when WebSocket is connected
-      if (circleId) {
-        console.log('🔧 Joining circle:', circleId);
-        wsRef.current.joinCircle(circleId);
+    } else {
+      console.log('Creating new WebSocket service');
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setWsError('No authentication token found');
+        return;
       }
 
-      wsRef.current.on('joined-circle', (data: any) => {
-        console.log('✅ Successfully joined circle:', data);
-      });
+      console.log('Setting up WebSocket connection...');
+      console.log('Token exists:', !!token);
+      
+      // First test if backend HTTP server is reachable
+      try {
+        console.log('Testing backend HTTP connection...');
+        const response = await fetch('http://localhost:5009/');
+        console.log('Backend HTTP test:', response.status, response.statusText);
+        const responseText = await response.text();
+        console.log('Backend response:', responseText);
+      } catch (error) {
+        console.error('Backend HTTP connection failed:', error);
+        setWsError('Backend server is not running. Please start the server with: cd mamami && pnpm dev');
+        return;
+      }
+      
+      wsRef.current = new WebSocketService();
+    
+      try {
+        console.log('Attempting to connect WebSocket...');
+        await wsRef.current.connect(token);
+        console.log('WebSocket connection successful!');
+        setWsConnected(true);
+        setWsError('');
 
-      wsRef.current.on('new-message', (message: Message) => {
-        console.log('🎉 NEW MESSAGE RECEIVED:', message);
-        
-        // Only add message if it belongs to the current circle
-        if (message.circleId === circleId) {
-          setMessages(prev => {
-            // Check if message already exists to avoid duplicates
-            const exists = prev.some(m => m.id === message.id);
-            if (exists) {
-              console.log('Message already exists, not adding duplicate');
-              return prev;
-            }
-            
-            // Check if this is a real message that should replace a temporary message
-            const tempMessageIndex = prev.findIndex(m => 
-              m.id.startsWith('temp-') && 
-              m.content === message.content && 
-              m.userId === message.userId
-            );
-            
-            if (tempMessageIndex !== -1) {
-              console.log('Replacing temporary message with real message');
-              const newMessages = [...prev];
-              newMessages[tempMessageIndex] = message;
+        console.log('WebSocket connected and authenticated');
+
+        // Set up message handlers for backend message types
+        wsRef.current.on('authenticated', (data: any) => {
+          console.log('WebSocket authenticated:', data);
+        });
+
+        // Join the circle when WebSocket is connected
+        if (circleId) {
+          console.log('🔧 Joining circle:', circleId);
+          wsRef.current.joinCircle(circleId);
+        }
+
+        wsRef.current.on('joined-circle', (data: any) => {
+          console.log('✅ Successfully joined circle:', data);
+        });
+
+        // Add debugging for WebSocket connection status
+        console.log('🔌 WebSocket connection status:', {
+          connected: wsRef.current ? true : false,
+          circleId: circleId,
+          user: user?.id
+        });
+
+        wsRef.current.on('new-message', (message: Message) => {
+          console.log('🎉 NEW MESSAGE RECEIVED:', message);
+          console.log('🔍 Message circleId:', message.circleId, 'Current circleId:', circleId);
+          
+          // Only add message if it belongs to the current circle
+          if (message.circleId === circleId) {
+            setMessages(prev => {
+              // Check if message already exists to avoid duplicates
+              const exists = prev.some(m => m.id === message.id);
+              if (exists) {
+                console.log('Message already exists, not adding duplicate');
+                return prev;
+              }
+              
+              // Check if this is a real message that should replace a temporary message
+              const tempMessageIndex = prev.findIndex(m => 
+                m.id.startsWith('temp-') && 
+                m.content === message.content && 
+                m.userId === message.userId
+              );
+              
+              if (tempMessageIndex !== -1) {
+                console.log('Replacing temporary message with real message');
+                const newMessages = [...prev];
+                newMessages[tempMessageIndex] = message;
+                return newMessages;
+              }
+              
+              console.log('Adding new message to chat for circle:', circleId);
+              const newMessages = [...prev, message];
+              // Scroll to bottom after adding new message
+              setTimeout(() => scrollToBottom(), 100);
               return newMessages;
-            }
-            
-            console.log('Adding new message to chat for circle:', circleId);
-            return [...prev, message];
-          });
-        } else {
-          console.log('Message received for different circle:', message.circleId, 'current circle:', circleId);
-        }
-      });
+            });
+          } else {
+            console.log('Message received for different circle:', message.circleId, 'current circle:', circleId);
+          }
+        });
 
-      wsRef.current.on('user-typing', (data: { userId: string; circleId: string; isTyping: boolean }) => {
-        console.log('User typing:', data);
-        if (data.isTyping) {
-          setTypingUsers(prev => {
-            const newSet = new Set(prev);
-            newSet.add(data.userId);
-            return Array.from(newSet);
-          });
-        } else {
-          setTypingUsers(prev => prev.filter(id => id !== data.userId));
-        }
-      });
+        wsRef.current.on('user-typing', (data: { userId: string; circleId: string; isTyping: boolean }) => {
+          console.log('User typing:', data);
+          if (data.isTyping) {
+            setTypingUsers(prev => {
+              const newSet = new Set(prev);
+              newSet.add(data.userId);
+              return Array.from(newSet);
+            });
+          } else {
+            setTypingUsers(prev => prev.filter(id => id !== data.userId));
+          }
+        });
 
+        wsRef.current.on('error', (data: any) => {
+          console.error('WebSocket error:', data);
+          let errorMessage = data.message || data.field || 'WebSocket error occurred';
+          
+          // Provide more helpful error messages
+          if (errorMessage.includes('connection failed')) {
+            errorMessage = 'Cannot connect to server. Please make sure the backend server is running on port 5009.';
+          } else if (errorMessage.includes('timeout')) {
+            errorMessage = 'Connection timeout. Server may not be responding.';
+          } else if (errorMessage.includes('Authentication failed')) {
+            errorMessage = 'Authentication failed. Please try logging in again.';
+          }
+          
+          setWsError(errorMessage);
+        });
 
-
-      wsRef.current.on('error', (data: any) => {
-        console.error('WebSocket error:', data);
-        let errorMessage = data.message || data.field || 'WebSocket error occurred';
-        
-        // Provide more helpful error messages
-        if (errorMessage.includes('connection failed')) {
-          errorMessage = 'Cannot connect to server. Please make sure the backend server is running on port 5009.';
-        } else if (errorMessage.includes('timeout')) {
-          errorMessage = 'Connection timeout. Server may not be responding.';
-        } else if (errorMessage.includes('Authentication failed')) {
-          errorMessage = 'Authentication failed. Please try logging in again.';
-        }
-        
+      } catch (error) {
+        console.error('WebSocket connection failed:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to connect to real-time chat';
+        console.error('Detailed error:', errorMessage);
         setWsError(errorMessage);
-      });
-
-    } catch (error) {
-      console.error('WebSocket connection failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to connect to real-time chat';
-      console.error('Detailed error:', errorMessage);
-      setWsError(errorMessage);
-      setWsConnected(false);
+        setWsConnected(false);
+      }
     }
   };
 
@@ -274,7 +293,12 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
     };
 
     // Add temporary message immediately
-    setMessages(prev => [...prev, tempMessage]);
+    setMessages(prev => {
+      const newMessages = [...prev, tempMessage];
+      // Scroll to bottom after adding temporary message
+      setTimeout(() => scrollToBottom(), 100);
+      return newMessages;
+    });
 
     try {
       console.log('📤 Sending message to circle:', circleId, 'Content:', messageContent);
