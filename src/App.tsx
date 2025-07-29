@@ -107,6 +107,8 @@ function App() {
 
     } catch (error) {
       console.error('❌ Failed to connect WebSocket:', error);
+      // Don't set wsService if connection fails - HTTP API fallback will handle messaging
+      console.log('📡 Will rely on HTTP API fallback for messaging');
     }
   };
 
@@ -151,7 +153,8 @@ function App() {
 
   const handleWebSocketError = (error: any) => {
     console.error('WebSocket error:', error);
-    addNotification('Connection error. Please refresh the page.');
+    // Don't show error notification - HTTP API fallback will handle messaging
+    console.log('📡 WebSocket error occurred, HTTP API fallback will handle messaging');
   };
 
   const addNotification = (message: string) => {

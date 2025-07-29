@@ -112,6 +112,7 @@ function callReducer(state: CallState, action: CallAction): CallState {
       };
 
     case 'RESET_CALL':
+      console.log('🔄 RESET_CALL action dispatched, resetting to initial state');
       return initialCallState;
 
     default:
@@ -228,19 +229,24 @@ export const AudioCallProvider: React.FC<AudioCallProviderProps> = ({ children, 
     }
 
     if (['ENDED', 'REJECTED', 'MISSED'].includes(callState.callStatus)) {
-      // Leave Agora channel and reset call state after a delay
+      // Reset call state immediately for UI responsiveness
+      console.log('🔄 Resetting call state for UI');
+      
+      // Leave Agora channel in the background
       const cleanupCall = async () => {
         try {
           await agoraService.leaveChannel();
+          console.log('✅ Agora channel cleanup completed');
         } catch (error) {
           console.error('Failed to leave Agora channel:', error);
         }
-        
-        setTimeout(() => {
-          dispatch({ type: 'RESET_CALL' });
-        }, 2000);
       };
-      cleanupCall();
+      
+      // Reset call state immediately, then cleanup Agora
+      setTimeout(() => {
+        dispatch({ type: 'RESET_CALL' });
+        cleanupCall();
+      }, 500); // Reduced delay for better UX
     }
   }, [callState.callStatus, callState.channelName, callState.token, callState.agoraAppId, callState.isCaller]);
 

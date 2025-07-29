@@ -4,11 +4,12 @@ import tokenUtils from '../utils/tokenUtils';
 export class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
+  private maxReconnectAttempts = 2; // Reduced to prevent server overload
+  private reconnectDelay = 5000; // Increased delay
   private messageHandlers: Map<string, ((data: any) => void)[]> = new Map();
   private isAuthenticated = false;
   private authenticationPromise: Promise<void> | null = null;
+  private isConnecting = false;
 
   constructor(private baseUrl: string = process.env.REACT_APP_WS_URL || 'ws://localhost:5009') {
     // Log the WebSocket URL being used
@@ -18,6 +19,19 @@ export class WebSocketService {
   connect(token: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        if (this.isConnecting) {
+          console.log('WebSocket connection already in progress');
+          resolve();
+          return;
+        }
+        
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          console.log('WebSocket already connected');
+          resolve();
+          return;
+        }
+        
+        this.isConnecting = true;
         console.log('Connecting to WebSocket at:', this.baseUrl);
         
         // Validate token before connecting
@@ -27,6 +41,7 @@ export class WebSocketService {
         if (!tokenUtils.isValidToken(token)) {
           const error = new Error('Invalid or expired token');
           console.error('Token validation failed:', error);
+          this.isConnecting = false;
           reject(error);
           return;
         }
@@ -41,9 +56,10 @@ export class WebSocketService {
           if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
             console.error('WebSocket connection timeout');
             this.ws.close();
+            this.isConnecting = false;
             reject(new Error('WebSocket connection timeout - server may not be running'));
           }
-        }, 10000); // 10 second timeout
+        }, 15000); // Increased to 15 seconds
 
         this.ws.onopen = () => {
           clearTimeout(connectionTimeout);
@@ -56,14 +72,15 @@ export class WebSocketService {
             token: token
           };
           
-          console.log('Sending auth message:', authMessage);
+          
           this.send(authMessage);
           
           // Wait for authentication response
           this.authenticationPromise = new Promise((authResolve, authReject) => {
             const authTimeout = setTimeout(() => {
+              console.error('❌ Authentication timeout after 15 seconds');
               authReject(new Error('Authentication timeout - server may not be responding'));
-            }, 5009);
+            }, 15000); // Increased to 15 seconds
 
             const authHandler = (message: any) => {
               if (message.type === 'authenticated') {
@@ -90,9 +107,13 @@ export class WebSocketService {
           });
 
           this.authenticationPromise
-            .then(() => resolve())
+            .then(() => {
+              this.isConnecting = false;
+              resolve();
+            })
             .catch((error) => {
               console.error('Authentication failed:', error);
+              this.isConnecting = false;
               reject(error);
             });
         };
@@ -100,7 +121,7 @@ export class WebSocketService {
         this.ws.onmessage = (event) => {
           try {
             const message: WebSocketMessage = JSON.parse(event.data);
-            console.log('📨 WebSocket message received:', message);
+            // Message received
             this.handleMessage(message);
           } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -111,10 +132,13 @@ export class WebSocketService {
           clearTimeout(connectionTimeout);
           console.log('WebSocket disconnected:', event.code, event.reason);
           this.isAuthenticated = false;
+          this.isConnecting = false;
           
-          // Only attempt reconnection if it wasn't a deliberate close
-          if (event.code !== 1000) {
+          // Only attempt reconnection if it wasn't a deliberate close and we haven't maxed out
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.handleReconnect();
+          } else if (event.code !== 1000) {
+            console.log('WebSocket disconnected but max reconnection attempts reached - using HTTP API fallback');
           }
         };
 
@@ -122,6 +146,7 @@ export class WebSocketService {
           clearTimeout(connectionTimeout);
           console.error('WebSocket error:', error);
           console.error('WebSocket URL attempted:', this.baseUrl);
+          this.isConnecting = false;
           reject(new Error(`WebSocket connection failed - make sure backend server is running on port 5009`));
         };
 
@@ -136,6 +161,10 @@ export class WebSocketService {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      
+      // Exponential backoff to prevent server overload
+      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+      console.log(`Waiting ${delay}ms before reconnection attempt...`);
       
       setTimeout(() => {
         const token = localStorage.getItem('accessToken');
@@ -152,17 +181,10 @@ export class WebSocketService {
           console.error('No valid token found, stopping reconnection attempts');
           this.reconnectAttempts = this.maxReconnectAttempts;
         }
-      }, this.reconnectDelay * this.reconnectAttempts);
+      }, delay);
     } else {
-      console.error('Max reconnection attempts reached');
-      // Emit error event to notify components
-      const handlers = this.messageHandlers.get('error');
-      if (handlers) {
-        handlers.forEach(handler => handler({ 
-          message: 'WebSocket connection failed after maximum attempts',
-          type: 'connection-failed'
-        }));
-      }
+      console.error('Max reconnection attempts reached - will rely on HTTP API fallback');
+      // Don't emit error, just log - HTTP API fallback will handle messaging
     }
   }
 
@@ -172,8 +194,21 @@ export class WebSocketService {
       this.ws = null;
     }
     this.isAuthenticated = false;
+    this.isConnecting = false;
     this.messageHandlers.clear();
     this.reconnectAttempts = this.maxReconnectAttempts; // Stop reconnection attempts
+  }
+
+  // Public method to check if WebSocket is authenticated
+  isConnected(): boolean {
+    return this.isAuthenticated && this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  // Public method to reset connection state (useful for manual reconnection)
+  resetConnectionState(): void {
+    this.reconnectAttempts = 0;
+    this.isConnecting = false;
+    console.log('WebSocket connection state reset');
   }
 
   on(event: string, handler: (data: any) => void) {
@@ -194,7 +229,7 @@ export class WebSocketService {
   }
 
   private handleMessage(message: WebSocketMessage) {
-    console.log('🔍 Handling message:', message);
+    // Handling message
     
     // Handle different message structures from backend
     if (message.type === 'authenticated') {
@@ -207,25 +242,15 @@ export class WebSocketService {
     }
 
     if (message.type === 'new-message') {
-      console.log('🎉 NEW MESSAGE EVENT:', message);
-      console.log('🔍 Message structure:', {
-        hasData: !!message.data,
-        hasMessage: !!message.message,
-        dataKeys: message.data ? Object.keys(message.data) : 'no data',
-        messageKeys: message.message ? Object.keys(message.message) : 'no message',
-        fullMessage: message
-      });
       const handlers = this.messageHandlers.get('new-message');
       if (handlers) {
         const messageData = message.data || message.message || message;
-        console.log('📤 Passing to handlers:', messageData);
         handlers.forEach(handler => handler(messageData));
       }
       return;
     }
 
     if (message.type === 'joined-circle') {
-      console.log('✅ JOINED CIRCLE:', message);
       const handlers = this.messageHandlers.get('joined-circle');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -234,7 +259,6 @@ export class WebSocketService {
     }
 
     if (message.type === 'left-circle') {
-      console.log('👋 LEFT CIRCLE:', message);
       const handlers = this.messageHandlers.get('left-circle');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -243,7 +267,6 @@ export class WebSocketService {
     }
 
     if (message.type === 'message-sent') {
-      console.log('✅ Message sent confirmation:', message);
       const handlers = this.messageHandlers.get('message-sent');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -252,27 +275,15 @@ export class WebSocketService {
     }
 
     if (message.type === 'new-direct-message') {
-      console.log('💬 NEW DIRECT MESSAGE EVENT:', message);
-      console.log('🔍 Message data structure:', {
-        hasData: !!message.data,
-        hasMessage: !!message.message,
-        dataKeys: message.data ? Object.keys(message.data) : 'no data',
-        messageKeys: message.message ? Object.keys(message.message) : 'no message',
-        createdAt: message.data?.createdAt || message.message?.createdAt || 'missing',
-        fullData: message.data,
-        fullMessage: message.message
-      });
       const handlers = this.messageHandlers.get('new-direct-message');
       if (handlers) {
         const messageData = message.data || message.message || message;
-        console.log('📤 Passing to handlers:', messageData);
         handlers.forEach(handler => handler(messageData));
       }
       return;
     }
 
     if (message.type === 'direct-message-sent') {
-      console.log('✅ Direct message sent confirmation:', message);
       const handlers = this.messageHandlers.get('direct-message-sent');
       if (handlers) {
         handlers.forEach(handler => handler(message.message || message.data || message));
@@ -281,7 +292,6 @@ export class WebSocketService {
     }
 
     if (message.type === 'friend-request-received') {
-      console.log('👥 FRIEND REQUEST RECEIVED:', message);
       const handlers = this.messageHandlers.get('friend-request-received');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -290,7 +300,6 @@ export class WebSocketService {
     }
 
     if (message.type === 'friend-request-accepted') {
-      console.log('✅ FRIEND REQUEST ACCEPTED:', message);
       const handlers = this.messageHandlers.get('friend-request-accepted');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -299,7 +308,6 @@ export class WebSocketService {
     }
 
     if (message.type === 'friend-request-rejected') {
-      console.log('❌ FRIEND REQUEST REJECTED:', message);
       const handlers = this.messageHandlers.get('friend-request-rejected');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -308,7 +316,6 @@ export class WebSocketService {
     }
 
     if (message.type === 'friend-removed') {
-      console.log('👋 FRIEND REMOVED:', message);
       const handlers = this.messageHandlers.get('friend-removed');
       if (handlers) {
         handlers.forEach(handler => handler(message.data || message));
@@ -401,10 +408,9 @@ export class WebSocketService {
 
   send(message: any) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      console.log('📤 Sending WebSocket message:', message);
       this.ws.send(JSON.stringify(message));
     } else {
-      console.error('❌ WebSocket is not connected');
+      console.error('WebSocket is not connected');
     }
   }
 
@@ -415,13 +421,11 @@ export class WebSocketService {
       console.error('❌ Cannot send message: not authenticated');
       return;
     }
-    console.log('💬 Sending message to circle:', circleId, 'Content:', content);
     const message = {
       type: 'send-message',
       circleId: circleId,
       content: content
     };
-    console.log('📤 Sending WebSocket message:', message);
     this.send(message);
   }
 

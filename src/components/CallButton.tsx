@@ -20,11 +20,26 @@ const CallButton: React.FC<CallButtonProps> = ({
 
   const handleCall = () => {
     if (!callState.isInCall) {
+      console.log('📞 CallButton: Initiating call to:', receiverId);
       initiateCall(receiverId);
+    } else {
+      console.log('📞 CallButton: Call already in progress, cannot initiate new call');
     }
   };
 
   const isDisabled = callState.isInCall;
+  
+  // Debug logging
+  React.useEffect(() => {
+    console.log('📞 CallButton state:', {
+      receiverId,
+      isInCall: callState.isInCall,
+      callStatus: callState.callStatus,
+      isCaller: callState.isCaller,
+      isReceiver: callState.isReceiver,
+      isDisabled
+    });
+  }, [callState.isInCall, callState.callStatus, callState.isCaller, callState.isReceiver, isDisabled, receiverId]);
 
   const sizeClasses = {
     sm: 'w-8 h-8',
