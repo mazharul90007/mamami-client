@@ -10,7 +10,7 @@ export class WebSocketService {
   private isAuthenticated = false;
   private authenticationPromise: Promise<void> | null = null;
 
-  constructor(private baseUrl: string = process.env.REACT_APP_WS_URL || 'ws://localhost:5000') {
+  constructor(private baseUrl: string = process.env.REACT_APP_WS_URL || 'ws://localhost:5009') {
     // Log the WebSocket URL being used
     console.log('WebSocket will connect to:', this.baseUrl);
   }
@@ -63,7 +63,7 @@ export class WebSocketService {
           this.authenticationPromise = new Promise((authResolve, authReject) => {
             const authTimeout = setTimeout(() => {
               authReject(new Error('Authentication timeout - server may not be responding'));
-            }, 5000);
+            }, 5009);
 
             const authHandler = (message: any) => {
               if (message.type === 'authenticated') {
@@ -122,7 +122,7 @@ export class WebSocketService {
           clearTimeout(connectionTimeout);
           console.error('WebSocket error:', error);
           console.error('WebSocket URL attempted:', this.baseUrl);
-          reject(new Error(`WebSocket connection failed - make sure backend server is running on port 5000`));
+          reject(new Error(`WebSocket connection failed - make sure backend server is running on port 5009`));
         };
 
       } catch (error) {

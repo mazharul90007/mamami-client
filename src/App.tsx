@@ -159,7 +159,7 @@ function App() {
     setNotifications(prev => [...prev, message]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n !== message));
-    }, 5000);
+    }, 5009);
   };
 
   const handleMoodSelection = async (moods: Mood[]) => {

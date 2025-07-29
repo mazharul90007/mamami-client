@@ -132,7 +132,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
     // First test if backend HTTP server is reachable
     try {
       console.log('Testing backend HTTP connection...');
-      const response = await fetch('http://localhost:5000/');
+      const response = await fetch('http://localhost:5009/');
       console.log('Backend HTTP test:', response.status, response.statusText);
       const responseText = await response.text();
       console.log('Backend response:', responseText);
@@ -214,7 +214,7 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ circleId: propCircleId, onBack }) =
         
         // Provide more helpful error messages
         if (errorMessage.includes('connection failed')) {
-          errorMessage = 'Cannot connect to server. Please make sure the backend server is running on port 5000.';
+          errorMessage = 'Cannot connect to server. Please make sure the backend server is running on port 5009.';
         } else if (errorMessage.includes('timeout')) {
           errorMessage = 'Connection timeout. Server may not be responding.';
         } else if (errorMessage.includes('Authentication failed')) {

@@ -130,7 +130,7 @@ const AudioCallDebug: React.FC = () => {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <h3 className="text-lg font-semibold text-yellow-900 mb-2">Debug Instructions</h3>
           <ol className="list-decimal list-inside space-y-1 text-yellow-800">
-            <li>Make sure your backend is running on port 5000</li>
+            <li>Make sure your backend is running on port 5009</li>
             <li>Check browser console for WebSocket connection logs</li>
             <li>Enter a valid user ID in the test field</li>
             <li>Click "Test Initiate Call" to test call functionality</li>
@@ -143,7 +143,7 @@ const AudioCallDebug: React.FC = () => {
         <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
           <h3 className="text-lg font-semibold text-red-900 mb-2">Common Issues to Check</h3>
           <ul className="list-disc list-inside space-y-1 text-red-800">
-            <li>Backend server not running on port 5000</li>
+            <li>Backend server not running on port 5009</li>
             <li>WebSocket connection not established</li>
             <li>User not authenticated</li>
             <li>Invalid user ID format</li>

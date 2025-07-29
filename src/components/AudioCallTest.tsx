@@ -79,7 +79,7 @@ const AudioCallTest: React.FC = () => {
         <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <h3 className="text-lg font-semibold text-yellow-900 mb-2">Important Notes</h3>
           <ul className="list-disc list-inside space-y-1 text-yellow-800">
-            <li>Make sure your backend server is running on port 5000</li>
+            <li>Make sure your backend server is running on port 5009</li>
             <li>Ensure WebSocket connection is established</li>
             <li>Check browser console for any errors</li>
             <li>Allow microphone permissions when prompted</li>
