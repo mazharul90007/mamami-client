@@ -1,160 +1,163 @@
-# Audio Call Feature Setup and Testing Guide
+# Audio Call Setup - 1-to-1 Calling Feature
 
 ## Overview
-This guide explains how to set up and test the 1-to-1 real-time audio call feature using Agora RTC SDK.
-
-## Prerequisites
-1. Backend server running on port 5000 with WebSocket support
-2. Agora App ID and App Certificate configured in backend
-3. Two user accounts for testing
-4. Microphone permissions enabled in browser
+This document describes the completed 1-to-1 audio calling feature implemented in the Mamami application using Agora for real-time audio communication.
 
 ## Features Implemented
 
-### 1. Audio Call Components
-- **AudioCallContext**: Manages call state and provides call functions
-- **AudioCallManager**: Handles call UI and modal management
-- **IncomingCallModal**: Shows incoming call interface
-- **ActiveCallModal**: Shows active call interface with controls
-- **CallButton**: Reusable component for initiating calls
+### ✅ **Core Call Functionality**
+- **Initiating Calls**: Users can start audio calls with their friends
+- **Receiving Calls**: Users receive incoming call notifications
+- **Call Management**: Accept, reject, and end calls
+- **Real-time Audio**: High-quality audio streaming using Agora
+- **Call Status Tracking**: Real-time updates of call states (ringing, connected, ended, etc.)
 
-### 2. WebSocket Integration
-- Call initiation via WebSocket
-- Real-time call status updates
-- Call acceptance/rejection handling
-- Call ending functionality
+### ✅ **User Interface Components**
+- **CallButton**: Integrated into friend management for easy call initiation
+- **IncomingCallModal**: Displays incoming call notifications with accept/reject options
+- **CallingModal**: Shows calling status for outgoing calls
+- **ActiveCallModal**: Active call interface with mute/unmute and end call options
+- **AudioCallManager**: Manages call state and displays appropriate modals
 
-### 3. Agora RTC Integration
-- Audio-only calls
-- Mute/unmute functionality
-- Call duration tracking
-- Automatic cleanup on call end
+### ✅ **Technical Implementation**
+- **WebSocket Integration**: Real-time call signaling via WebSocket
+- **Agora SDK**: Professional audio streaming with Agora RTC SDK
+- **State Management**: React Context for call state management
+- **Error Handling**: Comprehensive error handling and user feedback
 
-## How to Test
+## Setup Requirements
 
-### Step 1: Start the Backend
-```bash
-cd mamami
-npm run dev  # or your backend start command
+### 1. **Environment Variables**
+Add the following to your `.env` file:
+```env
+REACT_APP_AGORA_APP_ID=your_agora_app_id_here
 ```
 
-### Step 2: Start the Frontend
-```bash
-cd mamami-client
-pnpm start
+### 2. **Agora Credentials**
+You need to obtain from your client:
+- **Agora App ID** (for both frontend and backend)
+- **Agora App Certificate** (for backend only)
+
+### 3. **Backend Configuration**
+Ensure your backend has:
+- WebSocket server running
+- Agora token generation endpoint
+- Call session management
+
+## How to Use
+
+### **Making a Call**
+1. Navigate to Friends section
+2. Find the friend you want to call
+3. Click the green "Call" button
+4. Wait for the other user to accept
+
+### **Receiving a Call**
+1. When someone calls you, an incoming call modal appears
+2. Choose to accept (green button) or reject (red button)
+3. If accepted, you'll be connected to the call
+
+### **During a Call**
+- **Mute/Unmute**: Use the mute button to control your audio
+- **End Call**: Click the red "End Call" button to hang up
+- **Call Duration**: See how long the call has been active
+
+### **Call States**
+- **RINGING**: Call is being initiated or received
+- **CONNECTED**: Call is active and audio is streaming
+- **ENDED**: Call has been terminated
+- **REJECTED**: Call was declined
+- **MISSED**: Call was not answered
+
+## Technical Architecture
+
+### **Frontend Components**
+```
+AudioCallContext (State Management)
+├── CallButton (Call Initiation)
+├── IncomingCallModal (Incoming Call UI)
+├── CallingModal (Outgoing Call UI)
+├── ActiveCallModal (Active Call UI)
+└── AudioCallManager (Modal Coordinator)
 ```
 
-### Step 3: Test Audio Calls
+### **Data Flow**
+1. **Call Initiation**: Frontend → WebSocket → Backend → Agora Token Generation
+2. **Call Notification**: Backend → WebSocket → Frontend → Incoming Call Modal
+3. **Call Acceptance**: Frontend → WebSocket → Backend → Call Status Update
+4. **Audio Connection**: Frontend → Agora SDK → Agora Servers → Audio Stream
 
-1. **Open two browser windows/tabs**
-2. **Log in with different user accounts** in each window
-3. **Navigate to the Audio Call Test page** by clicking the 📞 icon in the navigation
-4. **Initiate a call**:
-   - In one window, enter the other user's ID in the "Test User ID" field
-   - Click the green call button
-5. **Accept the incoming call**:
-   - In the other window, you'll see an incoming call modal
-   - Click the green accept button
-6. **Test call features**:
-   - Mute/unmute your microphone
-   - Check call duration
-   - End the call
+### **WebSocket Messages**
+- `initiate-call`: Start a new call
+- `incoming-call`: Receive call notification
+- `call-accepted`: Call was accepted
+- `call-rejected`: Call was rejected
+- `call-ended`: Call was terminated
+- `call-missed`: Call was not answered
 
-### Step 4: Test in Real Components
+## Testing
 
-1. **Direct Message Calls**:
-   - Go to Messages section
-   - Select a conversation
-   - Click the call button in the chat header
+### **Local Development**
+1. Start your backend server
+2. Set up Agora credentials in `.env`
+3. Start the frontend development server
+4. Test calls between two browser tabs
 
-2. **Match List Calls**:
-   - Go to Find Matches
-   - Click the call button on any match card
-
-## WebSocket Events
-
-The frontend handles these WebSocket events:
-
-- `initiate-call`: Start a call
-- `call-initiated`: Call successfully initiated
-- `incoming-call`: Receive incoming call
-- `accept-call`: Accept incoming call
-- `call-accepted`: Call accepted by receiver
-- `reject-call`: Reject incoming call
-- `call-rejected`: Call rejected
-- `end-call`: End active call
-- `call-ended`: Call ended
-- `call-missed`: Call missed
-
-## Agora Configuration
-
-The backend should have these environment variables:
-```
-AGORA_APP_ID=your_agora_app_id
-AGORA_APP_CERTIFICATE=your_agora_app_certificate
-AGORA_TOKEN_EXPIRATION_TIME=3600
-```
+### **Postman Testing**
+You can test WebSocket functionality using Postman:
+1. Create WebSocket connection to your server
+2. Authenticate with JWT token
+3. Send call-related messages
+4. Verify responses and notifications
 
 ## Troubleshooting
 
-### Common Issues
+### **Common Issues**
+1. **"Agora App ID not configured"**
+   - Check your `.env` file has `REACT_APP_AGORA_APP_ID`
+   - Restart development server after changes
 
-1. **"User is not online" error**:
-   - Ensure both users are logged in and WebSocket is connected
-   - Check browser console for WebSocket connection status
+2. **WebSocket connection failed**
+   - Verify backend server is running
+   - Check WebSocket URL in `.env`
+   - Ensure JWT token is valid
 
-2. **"Failed to join Agora channel" error**:
-   - Check if Agora App ID is correctly configured
-   - Ensure microphone permissions are granted
-   - Check browser console for detailed error messages
+3. **Audio not working**
+   - Check browser permissions for microphone
+   - Verify Agora credentials are correct
+   - Check browser console for errors
 
-3. **No audio in call**:
-   - Check microphone permissions
-   - Ensure both users have granted microphone access
-   - Check if audio devices are working
+### **Debug Tools**
+- Use the "Call Test" button in navigation for debugging
+- Check browser console for detailed logs
+- Monitor WebSocket connection status
 
-4. **WebSocket connection issues**:
-   - Ensure backend is running on port 5000
-   - Check if WebSocket URL is correct
-   - Verify authentication token is valid
+## Security Features
 
-### Debug Information
-
-The components include extensive console logging. Check the browser console for:
-- WebSocket connection status
-- Call state changes
-- Agora channel events
-- Error messages
-
-## File Structure
-
-```
-src/
-├── components/
-│   ├── AudioCallManager.tsx      # Main call UI manager
-│   ├── IncomingCallModal.tsx     # Incoming call interface
-│   ├── ActiveCallModal.tsx       # Active call interface
-│   ├── CallButton.tsx           # Reusable call button
-│   └── AudioCallTest.tsx        # Test component
-├── contexts/
-│   └── AudioCallContext.tsx     # Call state management
-├── services/
-│   ├── websocket.ts             # WebSocket service (updated)
-│   └── agoraService.ts          # Agora RTC service
-└── types/
-    └── index.ts                 # Type definitions (updated)
-```
-
-## Security Notes
-
-- Agora tokens are generated server-side for security
-- WebSocket authentication is required for all call operations
-- Call sessions are tracked in the database
-- Users can only call online users
+- **JWT Authentication**: All calls require valid authentication
+- **Token-based Access**: Agora tokens are generated server-side
+- **User Validation**: Only friends can call each other
+- **Secure WebSocket**: All communication is encrypted
 
 ## Performance Considerations
 
-- Audio calls are optimized for low latency
-- Automatic cleanup prevents memory leaks
-- Call state is managed efficiently with React context
-- WebSocket reconnection handles network issues 
+- **Audio Quality**: Optimized for voice calls with VP8 codec
+- **Network Efficiency**: Adaptive bitrate based on connection quality
+- **Resource Management**: Automatic cleanup of audio resources
+- **Memory Optimization**: Efficient state management and cleanup
+
+## Future Enhancements
+
+- **Video Calling**: Add video support
+- **Group Calls**: Support for multiple participants
+- **Call Recording**: Option to record calls
+- **Screen Sharing**: Share screen during calls
+- **Call History**: Track and display call logs
+
+## Support
+
+For technical support or questions about the calling feature:
+1. Check the browser console for error messages
+2. Verify all environment variables are set
+3. Ensure backend services are running
+4. Check Agora console for service status 

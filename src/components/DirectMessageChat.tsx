@@ -592,8 +592,6 @@ const DirectMessageChat: React.FC<DirectMessageChatProps> = ({
           <CallButton
             receiverId={friend.id}
             receiverName={friend.name}
-            variant="icon"
-            size="sm"
           />
           <button className="text-gray-600 hover:text-gray-800">
             <MoreVertical className="h-5 w-5" />

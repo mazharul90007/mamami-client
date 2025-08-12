@@ -1,29 +1,62 @@
 import AgoraRTC, { 
   IAgoraRTCClient, 
   IAgoraRTCRemoteUser, 
-  ICameraVideoTrack, 
-  IMicrophoneAudioTrack,
-  UID 
+  IMicrophoneAudioTrack
 } from 'agora-rtc-sdk-ng';
 
 export class AgoraService {
   private client: IAgoraRTCClient | null = null;
   private localAudioTrack: IMicrophoneAudioTrack | null = null;
   private isInitialized = false;
+  private appId: string;
 
   constructor() {
+    // Get Agora App ID from environment
+    this.appId = process.env.REACT_APP_AGORA_APP_ID || '';
+    if (!this.appId) {
+      console.warn('⚠️ REACT_APP_AGORA_APP_ID not found in environment variables');
+    }
+    
     // Initialize Agora client
     this.client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
   }
 
-  async initialize(appId: string): Promise<void> {
+  // Sanitize channel name to meet Agora requirements
+  private sanitizeChannelName(channelName: string): string {
+    // Remove any invalid characters and keep only allowed ones
+    let sanitized = channelName.replace(/[^a-zA-Z0-9\s!#$%&()+\-:;<=.>?@[\]^_{|}~,]/g, '');
+    
+    // Replace spaces with hyphens
+    sanitized = sanitized.replace(/\s+/g, '-');
+    
+    // Truncate to 64 characters if too long
+    if (sanitized.length > 64) {
+      sanitized = sanitized.substring(0, 64);
+    }
+    
+    // Ensure it's not empty
+    if (!sanitized) {
+      sanitized = 'call-' + Date.now().toString(36);
+    }
+    
+    console.log('🔧 Original channel name:', channelName);
+    console.log('🔧 Sanitized channel name:', sanitized);
+    
+    return sanitized;
+  }
+
+  async initialize(): Promise<void> {
     if (this.isInitialized) {
       console.log('Agora client already initialized');
       return;
     }
 
+    if (!this.appId) {
+      throw new Error('Agora App ID not configured. Please set REACT_APP_AGORA_APP_ID in your .env file');
+    }
+
     try {
-      console.log('Initializing Agora client with appId:', appId);
+      console.log('Initializing Agora client with appId:', this.appId);
       this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize Agora client:', error);
@@ -32,7 +65,6 @@ export class AgoraService {
   }
 
   async joinChannel(
-    appId: string,
     channelName: string,
     token: string,
     uid: string
@@ -41,11 +73,23 @@ export class AgoraService {
       throw new Error('Agora client not initialized');
     }
 
+    if (!this.appId) {
+      throw new Error('Agora App ID not configured');
+    }
+
+    // Sanitize the channel name
+    const sanitizedChannelName = this.sanitizeChannelName(channelName);
+
     try {
-      console.log('Joining Agora channel:', { channelName, uid });
+      console.log('Joining Agora channel:', { 
+        originalChannelName: channelName,
+        sanitizedChannelName, 
+        uid, 
+        appId: this.appId 
+      });
       
-      // Join the channel
-      await this.client.join(appId, channelName, token, uid);
+      // Join the channel with sanitized name
+      await this.client.join(this.appId, sanitizedChannelName, token, uid);
       console.log('Successfully joined Agora channel');
 
       // Create and publish local audio track
@@ -116,50 +160,11 @@ export class AgoraService {
     });
   }
 
-  async leaveChannel(): Promise<void> {
-    if (!this.client) {
-      console.log('No Agora client to leave');
-      return;
-    }
-
-    try {
-      console.log('Leaving Agora channel');
-      
-      // Stop and close local audio track
-      if (this.localAudioTrack) {
-        this.localAudioTrack.stop();
-        this.localAudioTrack.close();
-        this.localAudioTrack = null;
-        console.log('Local audio track stopped and closed');
-      }
-
-      // Leave the channel
-      await this.client.leave();
-      console.log('Successfully left Agora channel');
-      
-    } catch (error) {
-      console.error('Failed to leave Agora channel:', error);
-      throw error;
-    }
-  }
-
-  async muteAudio(muted: boolean): Promise<void> {
-    if (!this.localAudioTrack) {
-      console.log('No local audio track to mute/unmute');
-      return;
-    }
-
-    try {
-      if (muted) {
-        this.localAudioTrack.setEnabled(false);
-        console.log('Audio muted');
-      } else {
-        this.localAudioTrack.setEnabled(true);
-        console.log('Audio unmuted');
-      }
-    } catch (error) {
-      console.error('Failed to mute/unmute audio:', error);
-      throw error;
+  // Public methods for audio control
+  muteAudio(muted: boolean): void {
+    if (this.localAudioTrack) {
+      this.localAudioTrack.setEnabled(!muted);
+      console.log(`Audio ${muted ? 'muted' : 'unmuted'}`);
     }
   }
 
@@ -167,25 +172,39 @@ export class AgoraService {
     return this.localAudioTrack ? !this.localAudioTrack.enabled : false;
   }
 
-  getConnectionState(): string {
-    return this.client ? this.client.connectionState : 'DISCONNECTED';
+  getLocalAudioTrack(): IMicrophoneAudioTrack | null {
+    return this.localAudioTrack;
   }
 
-  destroy(): void {
+  async leaveChannel(): Promise<void> {
+    if (this.client) {
+      try {
+        // Unpublish local audio track
+        if (this.localAudioTrack) {
+          await this.client.unpublish(this.localAudioTrack);
+          this.localAudioTrack.close();
+          this.localAudioTrack = null;
+        }
+
+        // Leave the channel
+        await this.client.leave();
+        console.log('Successfully left Agora channel');
+      } catch (error) {
+        console.error('Error leaving Agora channel:', error);
+        throw error;
+      }
+    }
+  }
+
+  // Cleanup method
+  cleanup(): void {
     if (this.localAudioTrack) {
-      this.localAudioTrack.stop();
       this.localAudioTrack.close();
       this.localAudioTrack = null;
     }
-    
-    if (this.client) {
-      this.client.removeAllListeners();
-      this.client = null;
-    }
-    
     this.isInitialized = false;
-    console.log('Agora service destroyed');
   }
 }
 
-export default new AgoraService(); 
+const agoraService = new AgoraService();
+export default agoraService; 

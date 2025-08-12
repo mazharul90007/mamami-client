@@ -154,8 +154,6 @@ const MatchList: React.FC<MatchListProps> = ({ matches, onBack, onSendFriendRequ
                 <CallButton
                   receiverId={user.id}
                   receiverName={user.name}
-                  variant="secondary"
-                  size="sm"
                   className="px-4 py-2"
                 />
                 <button

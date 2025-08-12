@@ -210,8 +210,6 @@ const FriendManagement: React.FC<FriendManagementProps> = ({ onSelectConversatio
                       <CallButton
                         receiverId={friend.id}
                         receiverName={friend.name}
-                        variant="secondary"
-                        size="sm"
                         className="px-3 py-2"
                       />
                       <button

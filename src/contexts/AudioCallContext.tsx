@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { CallState, IncomingCallData, CallInitiatedData, User } from '../types';
-import WebSocketService from '../services/websocket';
 import agoraService from '../services/agoraService';
 
 interface AudioCallContextType {
@@ -112,7 +111,6 @@ function callReducer(state: CallState, action: CallAction): CallState {
       };
 
     case 'RESET_CALL':
-      console.log('🔄 RESET_CALL action dispatched, resetting to initial state');
       return initialCallState;
 
     default:
@@ -120,198 +118,176 @@ function callReducer(state: CallState, action: CallAction): CallState {
   }
 }
 
-interface AudioCallProviderProps {
-  children: ReactNode;
-  wsService: WebSocketService | null;
-}
-
-export const AudioCallProvider: React.FC<AudioCallProviderProps> = ({ children, wsService }) => {
-  const [callState, dispatch] = useReducer(callReducer, initialCallState);
-  const [durationInterval, setDurationInterval] = React.useState<NodeJS.Timeout | null>(null);
-
-  // Set up WebSocket event listeners
+// Custom hook to connect WebSocket events to AudioCallContext
+const useWebSocketConnection = (dispatch: React.Dispatch<CallAction>) => {
   useEffect(() => {
-    console.log('🔧 AudioCallContext: Setting up WebSocket listeners, wsService:', !!wsService);
-    
-    const handleCallInitiated = (data: CallInitiatedData) => {
-      console.log('📞 Call initiated:', data);
-      dispatch({ type: 'CALL_INITIATED', payload: data });
+    const checkWebSocket = () => {
+      const wsService = (window as any).wsService;
+      if (wsService && wsService.ws && wsService.ws.readyState === WebSocket.OPEN) {
+        console.log('🔌 WebSocket connected, setting up call event listeners');
+        
+        // Set up call event listeners
+        wsService.on('call-initiated', (data: CallInitiatedData) => {
+          console.log('📞 Call initiated received in AudioCallContext:', data);
+          dispatch({ type: 'CALL_INITIATED', payload: data });
+        });
+
+        wsService.on('incoming-call', (data: IncomingCallData & { callerName: string; callerPhoto?: string }) => {
+          console.log('📞 Incoming call received in AudioCallContext:', data);
+          dispatch({ type: 'INCOMING_CALL', payload: data });
+        });
+
+        wsService.on('call-accepted', (data: { callId: string }) => {
+          console.log('✅ Call accepted received in AudioCallContext:', data);
+          dispatch({ type: 'CALL_ACCEPTED', payload: data });
+        });
+
+        wsService.on('call-rejected', (data: { callId: string }) => {
+          console.log('❌ Call rejected received in AudioCallContext:', data);
+          dispatch({ type: 'CALL_REJECTED', payload: data });
+        });
+
+        wsService.on('call-ended', (data: { callId: string; duration?: number }) => {
+          console.log('📞 Call ended received in AudioCallContext:', data);
+          dispatch({ type: 'CALL_ENDED', payload: data });
+        });
+
+        wsService.on('call-missed', (data: { callId: string }) => {
+          console.log('📞 Call missed received in AudioCallContext:', data);
+          dispatch({ type: 'CALL_MISSED', payload: data });
+        });
+
+        return true;
+      }
+      return false;
     };
 
-    const handleIncomingCall = (data: IncomingCallData & { callerName: string; callerPhoto?: string }) => {
-      console.log('📞 Incoming call:', data);
-      dispatch({ type: 'INCOMING_CALL', payload: data });
-    };
-
-    const handleCallAccepted = (data: { callId: string }) => {
-      console.log('✅ Call accepted:', data);
-      dispatch({ type: 'CALL_ACCEPTED', payload: data });
-    };
-
-    const handleCallRejected = (data: { callId: string }) => {
-      console.log('❌ Call rejected:', data);
-      dispatch({ type: 'CALL_REJECTED', payload: data });
-    };
-
-    const handleCallEnded = (data: { callId: string; duration?: number }) => {
-      console.log('📞 Call ended:', data);
-      dispatch({ type: 'CALL_ENDED', payload: data });
-    };
-
-    const handleCallMissed = (data: { callId: string }) => {
-      console.log('📞 Call missed:', data);
-      dispatch({ type: 'CALL_MISSED', payload: data });
-    };
-
-    // Register event listeners only if WebSocket service is available
-    if (wsService) {
-      wsService.on('call-initiated', handleCallInitiated);
-      wsService.on('incoming-call', handleIncomingCall);
-      wsService.on('call-accepted', handleCallAccepted);
-      wsService.on('call-rejected', handleCallRejected);
-      wsService.on('call-ended', handleCallEnded);
-      wsService.on('call-missed', handleCallMissed);
-
-      // Cleanup
-      return () => {
-        wsService.off('call-initiated', handleCallInitiated);
-        wsService.off('incoming-call', handleIncomingCall);
-        wsService.off('call-accepted', handleCallAccepted);
-        wsService.off('call-rejected', handleCallRejected);
-        wsService.off('call-ended', handleCallEnded);
-        wsService.off('call-missed', handleCallMissed);
-      };
+    // Check immediately
+    if (!checkWebSocket()) {
+      // If not connected, check every second
+      const interval = setInterval(checkWebSocket, 1000);
+      return () => clearInterval(interval);
     }
-    
-    return () => {};
-  }, [wsService]);
+  }, [dispatch]);
+};
 
-  // Handle call duration timer
+export const AudioCallProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [callState, dispatch] = useReducer(callReducer, initialCallState);
+
+  // Initialize Agora service
   useEffect(() => {
+    const initAgora = async () => {
+      try {
+        await agoraService.initialize();
+        console.log('✅ Agora service initialized successfully');
+      } catch (error) {
+        console.error('❌ Failed to initialize Agora service:', error);
+      }
+    };
+
+    initAgora();
+  }, []);
+
+  // Connect WebSocket events
+  useWebSocketConnection(dispatch);
+
+  // Handle call status changes
+  useEffect(() => {
+    if (callState.callStatus === 'CONNECTED' && callState.channelName && callState.token) {
+      // Join Agora channel when call is connected
+      const uid = Math.random().toString(36).substr(2, 9); // Generate unique UID
+      agoraService.joinChannel(callState.channelName, callState.token, uid)
+        .then(() => {
+          console.log('✅ Successfully joined Agora channel');
+        })
+        .catch((error) => {
+          console.error('❌ Failed to join Agora channel:', error);
+        });
+    }
+
+    if (['ENDED', 'REJECTED', 'MISSED'].includes(callState.callStatus)) {
+      // Leave Agora channel and reset call state
+      agoraService.leaveChannel();
+      
+      setTimeout(() => {
+        dispatch({ type: 'RESET_CALL' });
+      }, 2000);
+    }
+  }, [callState.callStatus, callState.channelName, callState.token]);
+
+  // Update call duration when connected
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
     if (callState.callStatus === 'CONNECTED') {
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         dispatch({ type: 'UPDATE_DURATION', payload: { duration: callState.duration + 1 } });
       }, 1000);
-      setDurationInterval(interval);
-    } else {
-      if (durationInterval) {
-        clearInterval(durationInterval);
-        setDurationInterval(null);
-      }
     }
 
     return () => {
-      if (durationInterval) {
-        clearInterval(durationInterval);
+      if (interval) {
+        clearInterval(interval);
       }
     };
   }, [callState.callStatus, callState.duration]);
 
-  // Handle call status changes
-  useEffect(() => {
-    if (callState.callStatus === 'CONNECTED' && callState.channelName && callState.token && callState.agoraAppId) {
-      // Join Agora channel when call is connected
-      const joinAgoraChannel = async () => {
-        try {
-          await agoraService.initialize(callState.agoraAppId!);
-          await agoraService.joinChannel(
-            callState.agoraAppId!,
-            callState.channelName!,
-            callState.token!,
-            callState.isCaller ? 'caller' : 'receiver'
-          );
-          console.log('Successfully joined Agora channel');
-        } catch (error) {
-          console.error('Failed to join Agora channel:', error);
-        }
-      };
-      joinAgoraChannel();
-    }
-
-    if (['ENDED', 'REJECTED', 'MISSED'].includes(callState.callStatus)) {
-      // Reset call state immediately for UI responsiveness
-      console.log('🔄 Resetting call state for UI');
-      
-      // Leave Agora channel in the background
-      const cleanupCall = async () => {
-        try {
-          await agoraService.leaveChannel();
-          console.log('✅ Agora channel cleanup completed');
-        } catch (error) {
-          console.error('Failed to leave Agora channel:', error);
-        }
-      };
-      
-      // Reset call state immediately, then cleanup Agora
-      setTimeout(() => {
-        dispatch({ type: 'RESET_CALL' });
-        cleanupCall();
-      }, 500); // Reduced delay for better UX
-    }
-  }, [callState.callStatus, callState.channelName, callState.token, callState.agoraAppId, callState.isCaller]);
-
+  // Call control functions
   const initiateCall = (receiverId: string) => {
     console.log('🔧 AudioCallContext: initiateCall called with receiverId:', receiverId);
+    
+    // Get WebSocket service from window
+    const wsService = (window as any).wsService;
     if (!wsService) {
       console.error('❌ WebSocket service not available');
       return;
     }
-    console.log('✅ WebSocket service available, dispatching INITIATE_CALL');
+
     dispatch({ type: 'INITIATE_CALL', payload: { receiverId } });
     console.log('📤 Calling wsService.initiateCall');
     wsService.initiateCall(receiverId);
   };
 
   const acceptCall = (callId: string) => {
-    if (!wsService) {
-      console.error('WebSocket service not available');
-      return;
-    }
-    wsService.acceptCall(callId);
+    console.log('✅ AudioCallContext: acceptCall called with callId:', callId);
+    const wsService = (window as any).wsService;
+    wsService?.acceptCall(callId);
   };
 
   const rejectCall = (callId: string) => {
-    if (!wsService) {
-      console.error('WebSocket service not available');
-      return;
-    }
-    wsService.rejectCall(callId);
+    console.log('❌ AudioCallContext: rejectCall called with callId:', callId);
+    const wsService = (window as any).wsService;
+    wsService?.rejectCall(callId);
   };
 
   const endCall = () => {
-    if (!wsService) {
-      console.error('WebSocket service not available');
-      return;
-    }
+    console.log('📞 AudioCallContext: endCall called');
     if (callState.callId) {
-      wsService.endCall(callState.callId);
+      const wsService = (window as any).wsService;
+      wsService?.endCall(callState.callId);
     }
   };
 
-  const muteAudio = async (muted: boolean) => {
-    try {
-      await agoraService.muteAudio(muted);
-    } catch (error) {
-      console.error('Failed to mute/unmute audio:', error);
-    }
+  const muteAudio = (muted: boolean) => {
+    agoraService.muteAudio(muted);
   };
 
   const isAudioMuted = () => {
     return agoraService.isAudioMuted();
   };
 
-  const value: AudioCallContextType = {
+  const contextValue: AudioCallContextType = {
     callState,
     initiateCall,
     acceptCall,
     rejectCall,
     endCall,
     muteAudio,
-    isAudioMuted
+    isAudioMuted,
   };
 
   return (
-    <AudioCallContext.Provider value={value}>
+    <AudioCallContext.Provider value={contextValue}>
       {children}
     </AudioCallContext.Provider>
   );

@@ -1,106 +1,85 @@
 import React from 'react';
+import { Phone, PhoneOff } from 'lucide-react';
 import { useAudioCall } from '../contexts/AudioCallContext';
 
 interface CallButtonProps {
   receiverId: string;
-  receiverName?: string;
+  receiverName: string;
   className?: string;
-  size?: 'sm' | 'md' | 'lg';
-  variant?: 'primary' | 'secondary' | 'icon';
 }
 
-const CallButton: React.FC<CallButtonProps> = ({
-  receiverId,
-  receiverName,
-  className = '',
-  size = 'md',
-  variant = 'primary'
+const CallButton: React.FC<CallButtonProps> = ({ 
+  receiverId, 
+  receiverName, 
+  className = '' 
 }) => {
-  const { callState, initiateCall } = useAudioCall();
+  const { callState, initiateCall, endCall } = useAudioCall();
 
-  const handleCall = () => {
-    if (!callState.isInCall) {
-      console.log('📞 CallButton: Initiating call to:', receiverId);
+  // Check if this user is the current call target
+  const isCurrentCallTarget = callState.isInCall && 
+    callState.remoteUser?.id === receiverId;
+
+  // Check if we can make a call (not in a call or this is the current call)
+  const canMakeCall = !callState.isInCall || isCurrentCallTarget;
+
+  // Check if call is in progress
+  const isCallInProgress = isCurrentCallTarget && 
+    ['RINGING', 'CONNECTED'].includes(callState.callStatus);
+
+  const handleCallClick = () => {
+    if (isCallInProgress) {
+      endCall();
+    } else if (canMakeCall) {
       initiateCall(receiverId);
-    } else {
-      console.log('📞 CallButton: Call already in progress, cannot initiate new call');
     }
   };
 
-  const isDisabled = callState.isInCall;
-  
-  // Debug logging
-  React.useEffect(() => {
-    console.log('📞 CallButton state:', {
-      receiverId,
-      isInCall: callState.isInCall,
-      callStatus: callState.callStatus,
-      isCaller: callState.isCaller,
-      isReceiver: callState.isReceiver,
-      isDisabled
-    });
-  }, [callState.isInCall, callState.callStatus, callState.isCaller, callState.isReceiver, isDisabled, receiverId]);
-
-  const sizeClasses = {
-    sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-12 h-12'
+  const getButtonText = () => {
+    if (isCallInProgress) {
+      if (callState.callStatus === 'RINGING') {
+        return callState.isCaller ? 'Calling...' : 'Incoming...';
+      }
+      if (callState.callStatus === 'CONNECTED') {
+        return 'End Call';
+      }
+    }
+    return 'Call';
   };
 
-  const variantClasses = {
-    primary: 'bg-green-500 hover:bg-green-600 text-white',
-    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-700',
-    icon: 'bg-transparent hover:bg-gray-100 text-gray-600'
+  const getButtonIcon = () => {
+    if (isCallInProgress) {
+      return <PhoneOff className="h-4 w-4" />;
+    }
+    return <Phone className="h-4 w-4" />;
   };
 
-  if (variant === 'icon') {
-    return (
-      <button
-        onClick={handleCall}
-        disabled={isDisabled}
-        className={`${sizeClasses[size]} rounded-full flex items-center justify-center transition-colors ${
-          variantClasses[variant]
-        } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-        title={receiverName ? `Call ${receiverName}` : 'Call'}
-      >
-        <svg
-          className={`${size === 'sm' ? 'w-4 h-4' : size === 'md' ? 'w-5 h-5' : 'w-6 h-6'}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-          />
-        </svg>
-      </button>
-    );
-  }
+  const getButtonClasses = () => {
+    let baseClasses = 'flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors';
+    
+    if (isCallInProgress) {
+      if (callState.callStatus === 'CONNECTED') {
+        baseClasses += ' bg-red-500 text-white hover:bg-red-600';
+      } else {
+        baseClasses += ' bg-yellow-500 text-white hover:bg-yellow-600';
+      }
+    } else if (canMakeCall) {
+      baseClasses += ' bg-green-500 text-white hover:bg-green-600';
+    } else {
+      baseClasses += ' bg-gray-300 text-gray-500 cursor-not-allowed';
+    }
+    
+    return `${baseClasses} ${className}`;
+  };
 
   return (
     <button
-      onClick={handleCall}
-      disabled={isDisabled}
-      className={`${sizeClasses[size]} rounded-full flex items-center justify-center transition-colors ${
-        variantClasses[variant]
-      } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      onClick={handleCallClick}
+      disabled={!canMakeCall}
+      className={getButtonClasses()}
+      title={isCallInProgress ? 'End call' : `Call ${receiverName}`}
     >
-      <svg
-        className={`${size === 'sm' ? 'w-4 h-4' : size === 'md' ? 'w-5 h-5' : 'w-6 h-6'}`}
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-        />
-      </svg>
+      {getButtonIcon()}
+      {getButtonText()}
     </button>
   );
 };

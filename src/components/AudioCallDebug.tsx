@@ -3,7 +3,7 @@ import { useAudioCall } from '../contexts/AudioCallContext';
 import { useAuth } from '../contexts/AuthContext';
 
 const AudioCallDebug: React.FC = () => {
-  const { callState, initiateCall, acceptCall, rejectCall, endCall } = useAudioCall();
+  const { callState, initiateCall } = useAudioCall();
   const { user } = useAuth();
   const [testUserId, setTestUserId] = useState('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);

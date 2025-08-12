@@ -47,8 +47,6 @@ const AudioCallTest: React.FC = () => {
             <CallButton
               receiverId={testUserId}
               receiverName="Test User"
-              variant="primary"
-              size="lg"
             />
             
             <button
